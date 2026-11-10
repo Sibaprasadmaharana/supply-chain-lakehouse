@@ -1,0 +1,46 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  lint-and-build:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: de_user
+          POSTGRES_PASSWORD: de_pass
+          POSTGRES_DB: supply
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U de_user -d supply"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PG_HOST: localhost
+      DUCKDB_PATH: ${{ github.workspace }}/warehouse/warehouse.duckdb
+      DBT_PROFILES_DIR: ${{ github.workspace }}/dbt_project
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Lint SQL
+        run: sqlfluff lint dbt_project/models
+      - name: Seed source system (30 simulated days)
+        run: python pipeline.py seed --days 30
+      - name: Initial load + full build
+        run: |
+          python pipeline.py ingest
+          python pipeline.py transform
+      - name: Incremental path (2 more days)
+        run: python pipeline.py cycle --n 2
+      - name: Source freshness
+        working-directory: dbt_project
+        run: dbt source freshness

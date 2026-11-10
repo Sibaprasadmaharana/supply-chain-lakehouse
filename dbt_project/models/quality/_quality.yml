@@ -1,0 +1,10 @@
+version: 2
+
+models:
+  - name: quarantine_shipments
+    description: Shipments that failed data-quality rules. Monitored by tests/assert_quarantine_rate_below_threshold.sql.
+    columns:
+      - name: shipment_id
+        data_tests: [unique, not_null]
+      - name: dq_issue
+        data_tests: [not_null]

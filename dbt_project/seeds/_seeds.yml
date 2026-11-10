@@ -1,0 +1,9 @@
+version: 2
+seeds:
+  - name: carrier_sla_targets
+    description: Contractual on-time delivery targets by carrier service level.
+    columns:
+      - name: service_level
+        data_tests: [unique, not_null]
+      - name: target_on_time_rate
+        data_tests: [not_null]

@@ -1,0 +1,15 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+.env
+warehouse/*.duckdb
+warehouse/*.duckdb.wal
+warehouse/exports/
+dbt_project/target/
+dbt_project/dbt_packages/
+dbt_project/logs/
+logs/
+.dagster/
+tmp*/
+.DS_Store

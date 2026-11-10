@@ -1,0 +1,19 @@
+version: 2
+
+sources:
+  - name: raw
+    description: Append-only bronze layer loaded incrementally from the Postgres OMS (may contain duplicates by design).
+    schema: raw
+    loaded_at_field: _loaded_at
+    freshness:
+      warn_after: {count: 24, period: hour}
+      error_after: {count: 72, period: hour}
+    tables:
+      - name: carriers
+      - name: sellers
+      - name: products
+      - name: customers
+        description: Every captured version of each customer row (used to build SCD Type 2).
+      - name: orders
+      - name: order_items
+      - name: shipments

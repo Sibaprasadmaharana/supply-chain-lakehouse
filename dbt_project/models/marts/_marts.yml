@@ -1,0 +1,139 @@
+version: 2
+
+models:
+  - name: dim_date
+    columns:
+      - name: date_key
+        data_tests: [unique, not_null]
+
+  - name: dim_customer
+    description: SCD Type 2 customer dimension (hand-written from the raw change log). Includes an unknown member '-1'.
+    columns:
+      - name: customer_sk
+        data_tests: [unique, not_null]
+      - name: customer_id
+        data_tests: [not_null]
+
+  - name: dim_seller
+    description: SCD Type 2 seller dimension built from the snap_sellers dbt snapshot.
+    columns:
+      - name: seller_sk
+        data_tests: [unique, not_null]
+
+  - name: dim_product
+    columns:
+      - name: product_id
+        data_tests: [unique, not_null]
+
+  - name: dim_carrier
+    columns:
+      - name: carrier_id
+        data_tests: [unique, not_null]
+      - name: target_on_time_rate
+        data_tests: [not_null]
+
+  - name: fact_order_items
+    description: Incremental fact at order-line grain with point-in-time customer and seller keys.
+    data_tests:
+      - dbt_utils.expression_is_true:
+          expression: "line_amount >= 0"
+    columns:
+      - name: order_item_id
+        data_tests: [unique, not_null]
+      - name: customer_sk
+        data_tests:
+          - relationships:
+              to: ref('dim_customer')
+              field: customer_sk
+      - name: seller_sk
+        data_tests:
+          - relationships:
+              to: ref('dim_seller')
+              field: seller_sk
+      - name: order_date_key
+        data_tests:
+          - relationships:
+              to: ref('dim_date')
+              field: date_key
+
+  - name: fact_shipments
+    description: Incremental fact at shipment grain (accumulating snapshot of in_transit -> delivered).
+    data_tests:
+      - dbt_utils.expression_is_true:
+          expression: "delivered_ts is null or delivered_ts >= shipped_ts"
+      - dbt_utils.expression_is_true:
+          expression: "freight_cost >= 0"
+    columns:
+      - name: shipment_id
+        data_tests: [unique, not_null]
+      - name: customer_sk
+        data_tests:
+          - relationships:
+              to: ref('dim_customer')
+              field: customer_sk
+      - name: carrier_id
+        data_tests:
+          - relationships:
+              to: ref('dim_carrier')
+              field: carrier_id
+
+  - name: mart_carrier_performance_monthly
+    description: Monthly carrier scorecard. Contract-enforced so downstream dashboards can rely on its schema.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [carrier_id, delivery_month]
+      - dbt_utils.expression_is_true:
+          expression: "on_time_rate between 0 and 1"
+    columns:
+      - name: carrier_id
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: carrier_name
+        data_type: varchar
+      - name: service_level
+        data_type: varchar
+      - name: delivery_month
+        data_type: date
+        constraints: [{type: not_null}]
+      - name: shipments_delivered
+        data_type: bigint
+      - name: on_time_rate
+        data_type: double
+      - name: target_on_time_rate
+        data_type: double
+      - name: meets_sla
+        data_type: boolean
+      - name: on_time_rate_3m_rolling
+        data_type: double
+      - name: on_time_rate_mom_change
+        data_type: double
+      - name: on_time_rank_in_month
+        data_type: bigint
+      - name: avg_transit_days
+        data_type: double
+      - name: total_freight_cost
+        data_type: double
+      - name: freight_cost_per_kg
+        data_type: double
+
+  - name: mart_carrier_delay_streaks
+    description: Gaps-and-islands analysis of consecutive poor-performance days per carrier.
+
+  - name: mart_daily_kpis
+    description: Daily KPI table on a full date spine for the executive dashboard.
+    columns:
+      - name: date_key
+        data_tests: [unique, not_null]
+
+exposures:
+  - name: supply_chain_kpi_dashboard
+    label: Supply Chain KPI Dashboard
+    type: dashboard
+    maturity: medium
+    description: Power BI dashboard built on the gold layer (exported to Parquet).
+    depends_on:
+      - ref('mart_daily_kpis')
+      - ref('mart_carrier_performance_monthly')
+      - ref('mart_carrier_delay_streaks')
+    owner:
+      name: Siba Prasad Maharana

@@ -1,0 +1,54 @@
+name: publish-dbt-docs
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: de_user
+          POSTGRES_PASSWORD: de_pass
+          POSTGRES_DB: supply
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U de_user -d supply"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PG_HOST: localhost
+      DUCKDB_PATH: ${{ github.workspace }}/warehouse/warehouse.duckdb
+      DBT_PROFILES_DIR: ${{ github.workspace }}/dbt_project
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: |
+          python pipeline.py seed --days 30
+          python pipeline.py ingest
+          python pipeline.py transform
+          python pipeline.py docs
+      - name: Collect docs site
+        run: |
+          mkdir site
+          cp dbt_project/target/index.html dbt_project/target/manifest.json dbt_project/target/catalog.json site/
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4

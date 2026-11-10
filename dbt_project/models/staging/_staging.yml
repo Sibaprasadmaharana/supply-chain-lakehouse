@@ -1,0 +1,70 @@
+version: 2
+
+models:
+  - name: stg_carriers
+    description: One row per carrier (latest version).
+    columns:
+      - name: carrier_id
+        data_tests: [unique, not_null]
+      - name: service_level
+        data_tests:
+          - accepted_values:
+              values: ['express', 'standard', 'economy']
+
+  - name: stg_sellers
+    columns:
+      - name: seller_id
+        data_tests: [unique, not_null]
+
+  - name: stg_products
+    columns:
+      - name: product_id
+        data_tests: [unique, not_null]
+
+  - name: stg_customers
+    columns:
+      - name: customer_id
+        data_tests: [unique, not_null]
+      - name: customer_segment
+        data_tests:
+          - accepted_values:
+              values: ['consumer', 'small_business', 'enterprise']
+
+  - name: stg_orders
+    columns:
+      - name: order_id
+        data_tests: [unique, not_null]
+      - name: customer_id
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('stg_customers')
+              field: customer_id
+      - name: order_status
+        data_tests:
+          - accepted_values:
+              values: ['placed', 'shipped', 'delivered', 'cancelled']
+
+  - name: stg_order_items
+    columns:
+      - name: order_item_id
+        data_tests: [unique, not_null]
+      - name: order_id
+        data_tests:
+          - relationships:
+              to: ref('stg_orders')
+              field: order_id
+
+  - name: stg_shipments
+    description: Latest version of each shipment plus a dq_issue flag for invalid rows.
+    columns:
+      - name: shipment_id
+        data_tests: [unique, not_null]
+      - name: shipment_status
+        data_tests:
+          - accepted_values:
+              values: ['in_transit', 'delivered']
+      - name: dq_issue
+        data_tests:
+          - accepted_values:
+              values: ['negative_freight_cost', 'delivered_before_shipped', 'delivered_without_timestamp']

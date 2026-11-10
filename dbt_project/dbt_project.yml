@@ -1,0 +1,39 @@
+name: supply_chain
+version: "1.0.0"
+config-version: 2
+profile: supply_chain
+
+model-paths: ["models"]
+snapshot-paths: ["snapshots"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+seed-paths: ["seeds"]
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+vars:
+  incremental_lookback_days: 3        # re-process recent rows to absorb late-arriving data
+  streak_on_time_threshold: 0.80      # a "bad day" for a carrier is below this on-time rate
+
+models:
+  supply_chain:
+    staging:
+      +schema: staging
+      +materialized: view
+    intermediate:
+      +schema: intermediate
+      +materialized: view
+    marts:
+      +schema: marts
+      +materialized: table
+    quality:
+      +schema: quality
+      +materialized: table
+
+seeds:
+  supply_chain:
+    +schema: reference
+    carrier_sla_targets:
+      +column_types:
+        service_level: varchar
+        target_on_time_rate: double

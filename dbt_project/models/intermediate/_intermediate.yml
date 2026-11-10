@@ -1,0 +1,49 @@
+version: 2
+
+models:
+  - name: int_customer_versions
+    description: >
+      SCD Type 2 history of customers built from the raw change log with window functions.
+      Consecutive versions with identical tracked attributes are collapsed.
+    columns:
+      - name: customer_sk
+        data_tests: [unique, not_null]
+
+  - name: int_order_weights
+    columns:
+      - name: order_id
+        data_tests: [unique, not_null]
+
+  - name: int_shipments_enriched
+    description: Clean shipments (quarantined rows removed) with delivery-performance metrics.
+    columns:
+      - name: shipment_id
+        data_tests: [unique, not_null]
+
+unit_tests:
+  - name: test_on_time_and_delay_logic
+    description: On-time = delivered on or before the promised date; delay counts whole days late; undelivered is null.
+    model: int_shipments_enriched
+    given:
+      - input: ref('stg_shipments')
+        rows:
+          - {shipment_id: 1, order_id: 10, carrier_id: 1, shipped_ts: "2026-01-02 10:00:00", delivered_ts: "2026-01-05 09:00:00", freight_cost: 100, shipment_status: delivered, updated_at: "2026-01-05 09:00:00"}
+          - {shipment_id: 2, order_id: 11, carrier_id: 1, shipped_ts: "2026-01-02 10:00:00", delivered_ts: "2026-01-09 18:00:00", freight_cost: 100, shipment_status: delivered, updated_at: "2026-01-09 18:00:00"}
+          - {shipment_id: 3, order_id: 12, carrier_id: 1, shipped_ts: "2026-01-02 10:00:00", delivered_ts: null, freight_cost: 100, shipment_status: in_transit, updated_at: "2026-01-02 10:00:00"}
+          - {shipment_id: 4, order_id: 13, carrier_id: 1, shipped_ts: "2026-01-02 10:00:00", delivered_ts: "2026-01-01 10:00:00", freight_cost: 100, shipment_status: delivered, updated_at: "2026-01-02 10:00:00", dq_issue: delivered_before_shipped}
+      - input: ref('stg_orders')
+        rows:
+          - {order_id: 10, customer_id: 5, order_ts: "2026-01-01 09:00:00", promised_delivery_date: "2026-01-06", updated_at: "2026-01-05 09:00:00"}
+          - {order_id: 11, customer_id: 6, order_ts: "2026-01-01 09:00:00", promised_delivery_date: "2026-01-06", updated_at: "2026-01-09 18:00:00"}
+          - {order_id: 12, customer_id: 7, order_ts: "2026-01-01 09:00:00", promised_delivery_date: "2026-01-06", updated_at: "2026-01-02 10:00:00"}
+          - {order_id: 13, customer_id: 8, order_ts: "2026-01-01 09:00:00", promised_delivery_date: "2026-01-06", updated_at: "2026-01-02 10:00:00"}
+      - input: ref('int_order_weights')
+        rows:
+          - {order_id: 10, order_weight_kg: 2.5}
+          - {order_id: 11, order_weight_kg: 1.0}
+          - {order_id: 12, order_weight_kg: 4.0}
+    expect:
+      rows:
+        - {shipment_id: 1, is_delivered: true, is_on_time: true, delay_days: 0}
+        - {shipment_id: 2, is_delivered: true, is_on_time: false, delay_days: 3}
+        - {shipment_id: 3, is_delivered: false, is_on_time: null, delay_days: null}
